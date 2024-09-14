@@ -1,11 +1,10 @@
-import shutil
+import logging as log
 import os
-from concurrent.futures import ThreadPoolExecutor
-import pdfplumber
-from text_processing import process_questions_and_answers
-from file_operations import load_checkpoint, save_checkpoint  # Import checkpoint functions
+import shutil
 
-MAX_PARALLELISM = 32
+import pdfplumber
+
+from file_operations import load_checkpoint, save_checkpoint  # Import checkpoint functions
 
 
 def create_pdf_copies(pdf_path, max_parallelism):
@@ -14,10 +13,10 @@ def create_pdf_copies(pdf_path, max_parallelism):
     for i in range(max_parallelism):
         temp_pdf_path = f"anatomy-copy-{i}.pdf"
         if not os.path.exists(temp_pdf_path):
-            print(f"Creating copy {i} of the PDF...")
+            log.info(f"Creating copy {i} of the PDF...")
             shutil.copyfile(pdf_path, temp_pdf_path)
         else:
-            print(f"Copy {i} already exists, skipping creation.")
+            log.info(f"Copy {i} already exists, skipping creation.")
         temp_pdfs.append(temp_pdf_path)
     return temp_pdfs
 
@@ -27,14 +26,14 @@ def remove_temp_pdfs(temp_pdfs):
     for temp_pdf in temp_pdfs:
         try:
             os.remove(temp_pdf)
-            print(f"Removed temporary PDF: {temp_pdf}")
+            log.info(f"Removed temporary PDF: {temp_pdf}")
         except OSError as e:
-            print(f"Error deleting temporary PDF {temp_pdf}: {e}")
+            log.info(f"Error deleting temporary PDF {temp_pdf}: {e}")
 
 
 def distribute_page_ranges(total_pages, max_parallelism):
     """Distributes pages into chunks for parallel processing with logging."""
-    print("Distributing pages among workers...")
+    log.info("Distributing pages among workers...")
     page_ranges = []
     start_page = 14  # Start from page 14, as the first 14 pages are garbage
     pages_per_worker = (total_pages - start_page) // max_parallelism
@@ -44,7 +43,7 @@ def distribute_page_ranges(total_pages, max_parallelism):
         else:
             page_range = range(start_page + i * pages_per_worker, start_page + (i + 1) * pages_per_worker)
         page_ranges.append(page_range)
-        print(f"Worker {i} will process pages {page_range}")
+        log.info(f"Worker {i} will process pages {page_range}")
     return page_ranges
 
 
@@ -58,7 +57,7 @@ def extract_columns_from_page_range(pdf_copy_path, page_range, total_pages):
             # Check if the page has already been processed (using checkpoints)
             left_text, right_text = load_checkpoint(page_num)
             if left_text is not None and right_text is not None:
-                print(f"Loaded checkpoint for page {page_num}")
+                log.info(f"Loaded checkpoint for page {page_num}")
             else:
                 page = pdf.pages[page_num]
                 # Extract text from the left and right columns
@@ -67,39 +66,7 @@ def extract_columns_from_page_range(pdf_copy_path, page_range, total_pages):
 
                 # Save the extracted columns to the checkpoint
                 save_checkpoint(page_num, left_text, right_text)
-                print(f"Extracted and saved columns for page {page_num}")
+                log.info(f"Extracted and saved columns for page {page_num}")
 
             results.append((page_num, left_text, right_text))
     return results
-
-
-def process_pdf_concurrently(pdf_path):
-    """Process the PDF concurrently to extract columns from pages."""
-    temp_pdfs = create_pdf_copies(pdf_path, MAX_PARALLELISM)
-    with pdfplumber.open(pdf_path) as pdf:
-        total_pages = len(pdf.pages)
-
-    # Distribute page ranges to the workers
-    page_ranges = distribute_page_ranges(total_pages, MAX_PARALLELISM)
-    page_data = []
-
-    # Use a ThreadPoolExecutor to process pages concurrently
-    with ThreadPoolExecutor(max_workers=MAX_PARALLELISM) as executor:
-        futures = [
-            executor.submit(extract_columns_from_page_range, temp_pdfs[i], page_ranges[i], total_pages)
-            for i in range(MAX_PARALLELISM)
-        ]
-
-        # Collect the results as they are completed
-        for future in futures:
-            result = future.result()
-            page_data.extend(result)
-        print("All workers have completed processing pages.")
-
-    # Sort the collected data by page number
-    page_data.sort(key=lambda x: x[0])  # Sort by page number
-
-    # Remove temporary PDF copies
-    remove_temp_pdfs(temp_pdfs)
-
-    return process_questions_and_answers(page_data)

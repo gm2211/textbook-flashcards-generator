@@ -1,5 +1,9 @@
+import logging as log
 import re
+
 from unidecode import unidecode  # Import unidecode for sanitizing text
+
+from model import OutputRow
 
 
 def handle_line_breaks(lines):
@@ -33,8 +37,11 @@ def sanitize_text(text):
     return unidecode(text)
 
 
-def process_questions_and_answers(page_data):
-    """Process the extracted column data into questions and answers."""
+def process_questions_and_answers(page_data) -> [OutputRow]:
+    """
+    Process the extracted column data into questions and answers, while also including the page number
+    from which the question and answer were extracted.
+    """
     questions = {}
     answers = {}
     questions_answer_by_chapter = {}
@@ -43,7 +50,7 @@ def process_questions_and_answers(page_data):
     is_questions_section = False
 
     for page_num, left_col, right_col in page_data:
-        print(f"Processing extracted content from page {page_num}...")
+        log.info(f"Processing extracted content from page {page_num}...")
 
         # Combine left and right columns, processing them sequentially
         left_lines = handle_line_breaks(left_col.split('\n')) if left_col else []
@@ -78,24 +85,31 @@ def process_questions_and_answers(page_data):
                 if match or number is not None:
                     if match:
                         if text and is_answers_section:
-                            # Sanitize the answer text before saving
-                            answers[number] = sanitize_text(text)
+                            # Sanitize and save the answer text, now including the page number
+                            answers[number] = (sanitize_text(text), page_num)
                         elif text:
-                            # Sanitize the question text before saving
-                            questions[number] = sanitize_text(text)
+                            # Sanitize and save the question text, now including the page number
+                            questions[number] = (sanitize_text(text), page_num)
                         number = int(match.group(1))
                         text = match.group(2).strip()
                     else:
                         text += f" {line}"
 
-    # Combine questions and answers based on question number
-    question_answer_pairs = []
+    # Combine questions and answers based on question number, including page number in the output
+    output_rows = []
     for chapter_number, (questions, answers) in questions_answer_by_chapter.items():
-        for question_number, question in questions.items():
-            answer = answers.get(question_number, "")
-            # Sanitize both the question and the answer before adding them to the result
-            question_answer_pairs.append(
-                (chapter_number, question_number, sanitize_text(question), sanitize_text(answer)))
+        for question_number, (question, page_num) in questions.items():
+            answer, answer_page_num = answers.get(question_number, ("", page_num))
+            # Sanitize the question and answer before saving
+            output_rows.append((
+                OutputRow(
+                    chapter=chapter_number,
+                    page_number=page_num,
+                    question_number=question_number,
+                    question=sanitize_text(question),
+                    answer=sanitize_text(answer)
+                )
+            ))
 
-    print(f"Processed {len(question_answer_pairs)} question-answer pairs.")
-    return question_answer_pairs
+    log.info(f"Processed {len(output_rows)} question-answer pairs.")
+    return output_rows
