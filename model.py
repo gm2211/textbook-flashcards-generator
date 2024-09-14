@@ -9,7 +9,7 @@ ANSWER_COL = 'answer'
 
 @dataclass
 class PageData:
-    page_num: int
+    page_number: int
     left_col: str
     right_col: str
 

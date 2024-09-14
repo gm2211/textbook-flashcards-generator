@@ -3,7 +3,7 @@ import re
 
 from unidecode import unidecode  # Import unidecode for sanitizing text
 
-from model import OutputRow
+from model import OutputRow, PageData
 
 
 def handle_line_breaks(lines):
@@ -37,7 +37,7 @@ def sanitize_text(text):
     return unidecode(text)
 
 
-def process_questions_and_answers(page_data) -> [OutputRow]:
+def process_questions_and_answers(page_datas: [PageData]) -> [OutputRow]:
     """
     Process the extracted column data into questions and answers, while also including the page number
     from which the question and answer were extracted.
@@ -49,8 +49,9 @@ def process_questions_and_answers(page_data) -> [OutputRow]:
     is_answers_section = False
     is_questions_section = False
 
-    for page_num, left_col, right_col in page_data:
-        log.info(f"Processing extracted content from page {page_num}...")
+    for page_data in page_datas:
+        page_num, left_col, right_col = page_data.page_number, page_data.left_col, page_data.right_col
+        log.info(f"Page {page_num} - extracting questions or answers...")
 
         # Combine left and right columns, processing them sequentially
         left_lines = handle_line_breaks(left_col.split('\n')) if left_col else []
@@ -101,15 +102,17 @@ def process_questions_and_answers(page_data) -> [OutputRow]:
         for question_number, (question, page_num) in questions.items():
             answer, answer_page_num = answers.get(question_number, ("", page_num))
             # Sanitize the question and answer before saving
-            output_rows.append((
-                OutputRow(
-                    chapter=chapter_number,
-                    page_number=page_num,
-                    question_number=question_number,
-                    question=sanitize_text(question),
-                    answer=sanitize_text(answer)
+            output_rows.append(
+                (
+                    OutputRow(
+                        chapter=chapter_number,
+                        page_number=page_num,
+                        question_number=question_number,
+                        question=sanitize_text(question),
+                        answer=sanitize_text(answer)
+                    )
                 )
-            ))
+            )
 
     log.info(f"Processed {len(output_rows)} question-answer pairs.")
     return output_rows

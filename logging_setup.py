@@ -25,11 +25,15 @@ class HumanFriendlyFormatter(log.Formatter):
             return f"{seconds} seconds {millis} millis"
 
 
-def setup_logging():
+def setup_logging(clear_existing_handlers=False):
     logger = log.getLogger()
     logger.setLevel(log.INFO)
+    if logger.hasHandlers() and clear_existing_handlers:
+        logger.handlers.clear()
     console_handler = log.StreamHandler()
     console_handler.setFormatter(
         HumanFriendlyFormatter(
-            '[Proc ID: %(process)s] %(levelname)s - %(message)s - [Elapsed: %(asctime)s]'))
+            '[Proc ID: %(process)s] %(levelname)s - %(message)s - [Elapsed: %(asctime)s]'
+        )
+    )
     logger.addHandler(console_handler)
