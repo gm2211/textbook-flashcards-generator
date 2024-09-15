@@ -1,5 +1,7 @@
 .idea/
 extracted_pages/
-anatomy_old.pdf
+questions_answers/
+anatomy*.pdf
+anatomy*.txt
 anatomy_questions_answers.csv
 output_questions_answers.csv

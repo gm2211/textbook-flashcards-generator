@@ -15,7 +15,7 @@ ANSWERS = "ANSWERS"
 
 QUESTIONS = "QUESTIONS"
 
-S = "INTRODUCTION"
+INTRODUCTION = "INTRODUCTION"
 
 QUESTIONS_ANSWERS_FOLDER = "questions_answers"
 
@@ -189,20 +189,22 @@ def process_questions_and_answers(page_datas: [RawPageData]) -> list[OutputRow]:
     for idx, line in enumerate(pages.lines):
         if is_introduction and QUESTIONS not in line:
             continue
-        if S in line:
+        if INTRODUCTION in line:
             is_introduction = True
-            introduction_index = line.find(S)
+            introduction_index = line.find(INTRODUCTION)
             line = line[:introduction_index]
         if ANSWERS in line:
             questions_lines_by_chapter[chapter_number] = questions_so_far
             questions_so_far = []
             is_answers_section = True
+            is_introduction = False  # Redundant because the first section after introduction is always questions
         elif QUESTIONS in line:
             if is_answers_section:
                 answers_lines_by_chapter[chapter_number] = answers_so_far
                 answers_so_far = []
                 chapter_number += 1
             is_answers_section = False
+            is_introduction = False
 
         page_num = pages.page_number_by_line_idx[idx]
 
