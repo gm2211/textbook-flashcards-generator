@@ -279,7 +279,9 @@ def process_questions_and_answers(page_datas: [RawPageData]) -> list[OutputRow]:
                     page_number=answer.page_number,
                     question_number=answer.question_number,
                     question=question.text,
-                    question_options=question.question_options,
+                    question_options="\n".join(
+                        [" ".join([letter, option]) for letter, option in question.question_options.items()]
+                    ),
                     answer_letter=answer.answer_letter,
                     answer=answer.text
                 )
