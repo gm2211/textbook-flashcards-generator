@@ -5,18 +5,27 @@ import shutil
 
 import pandas as pd
 
-from model import OutputRow, PageData
+from model import OutputRow, RawPageData
 
 CHECKPOINT_FOLDER = "extracted_pages"
 
 
-def save_checkpoint(page_data: PageData):
+def save_checkpoint(page_data: RawPageData):
     """Save the extracted columns to a checkpoint file."""
     if not os.path.exists(CHECKPOINT_FOLDER):
         os.makedirs(CHECKPOINT_FOLDER)
     file_path = os.path.join(CHECKPOINT_FOLDER, f"page_{page_data.page_number}.json")
+    output = {"left_text": page_data.left_col, "right_text": page_data.right_col}
+    write_to_file(file_path, output)
+
+
+def write_to_file(file_path, output):
+    if isinstance(output, str):
+        with open(file_path, 'w') as f:
+            f.write(output)
+        return
     with open(file_path, 'w') as f:
-        json.dump({"left_text": page_data.left_col, "right_text": page_data.right_col}, f)
+        json.dump(output, f)
 
 
 def load_checkpoint(page_num):
@@ -26,7 +35,7 @@ def load_checkpoint(page_num):
         return None
     with open(file_path, 'r') as f:
         data = json.load(f)
-    return PageData(page_number=page_num, left_col=data['left_text'], right_col=data['right_text'])
+    return RawPageData(page_number=page_num, left_col=data['left_text'], right_col=data['right_text'])
 
 
 def save_to_csv(output_rows: [OutputRow], output_csv_path):

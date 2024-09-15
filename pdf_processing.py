@@ -5,7 +5,7 @@ import pdfplumber
 
 import logging_setup
 from file_operations import create_pdf_copies, load_checkpoint, remove_temp_pdfs, save_checkpoint
-from model import PageData
+from model import RawPageData
 
 LEFT_COL_BBOX = (50, 0, 300, 783)
 RIGHT_COL_BBOX = (300, 0, 570, 783)
@@ -39,7 +39,7 @@ def extract_columns_from_page_range(
     # but ran into issues with pickling
     logging_setup.setup_logging()
 
-    results: [PageData] = []
+    results: [RawPageData] = []
     page_nums_to_read_from_pdf = set([x for x in page_range])
 
     for page_num in page_range:
@@ -59,7 +59,7 @@ def extract_columns_from_page_range(
             # Extract text from the left and right columns
             left_text = page.within_bbox(left_col_bbox).extract_text()
             right_text = page.within_bbox(right_col_bbox).extract_text()
-            page_data = PageData(page_number=page_num, left_col=left_text, right_col=right_text)
+            page_data = RawPageData(page_number=page_num, left_col=left_text, right_col=right_text)
 
             # Save the extracted columns to the checkpoint
             save_checkpoint(page_data)
@@ -69,7 +69,7 @@ def extract_columns_from_page_range(
     return results
 
 
-def process_pdf_concurrently(pdf_path, max_parallelism) -> [PageData]:
+def process_pdf_concurrently(pdf_path, max_parallelism) -> list[RawPageData]:
     """Process the PDF concurrently to extract columns from pages."""
     temp_pdfs = create_pdf_copies(pdf_path, max_parallelism)
     with pdfplumber.open(pdf_path) as pdf:
@@ -77,7 +77,7 @@ def process_pdf_concurrently(pdf_path, max_parallelism) -> [PageData]:
 
     # Distribute page ranges to the workers
     page_ranges = distribute_page_ranges(total_pages, max_parallelism)
-    page_datas: [PageData] = []
+    page_datas: [RawPageData] = []
 
     # Use a ThreadPoolExecutor to process pages concurrently
     with ProcessPoolExecutor(max_workers=max_parallelism) as executor:
