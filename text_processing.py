@@ -58,6 +58,8 @@ def parse_questions(lines: list[(str, int)], chapter: int) -> list[Question]:
     options = {}
     option_pattern = re.compile(r'^([A-Z])\.\s+(.+)')  # Regex to match options like "A. Option text"
     question_pattern = re.compile(r'^(\d+)\s+(.+)')  # Regex to match the start of a question like "66 A 23-year-old..."
+    last_question_num = 0  # Keep track of the last correct question number
+    last_page_number = None
 
     for line, page_number in lines:
         line = line.strip()
@@ -65,6 +67,15 @@ def parse_questions(lines: list[(str, int)], chapter: int) -> list[Question]:
         # Check if line starts a new question
         question_match = question_pattern.match(line)
         if question_match:
+            cur_question_num = int(question_match.group(1))
+
+            # Check if the question number is logically incorrect (like 1285 instead of 128)
+            if cur_question_num > last_question_num + 1:
+                log.warning(
+                    f"Question number {cur_question_num} is out of sequence. Adjusting to {last_question_num + 1}."
+                )
+                cur_question_num = last_question_num + 1
+
             # If we already have a question stored, finalize it and start a new one
             if question_number is not None:
                 question = Question(
@@ -77,7 +88,8 @@ def parse_questions(lines: list[(str, int)], chapter: int) -> list[Question]:
                 questions.append(question)
 
             # Reset for new question
-            question_number = int(question_match.group(1))
+            question_number = cur_question_num
+            last_question_num = question_number  # Update the last valid question number
             question_text_lines = [question_match.group(2)]  # Start collecting text for this question
             options = {}
             continue
@@ -89,12 +101,13 @@ def parse_questions(lines: list[(str, int)], chapter: int) -> list[Question]:
         else:
             # Continue collecting text for the current question
             question_text_lines.append(line)
+        last_page_number = page_number
 
     # Add the last question to the list
     if question_number is not None:
         question = Question(
             chapter=chapter,
-            page_number=page_number,
+            page_number=last_page_number,
             question_number=question_number,
             text=' '.join(question_text_lines),
             question_options=options
@@ -106,35 +119,48 @@ def parse_questions(lines: list[(str, int)], chapter: int) -> list[Question]:
 
 def parse_answers(lines: list[(str, int)], chapter: int) -> list[Answer]:
     answers = []
-    answer_number = None
     answer_letter = None
     answer_text_lines = []
-    answer_pattern = re.compile(
-        r'^(\d+)\s+([A-Z])\.\s+(.+)'
-    )  # Regex to match the answer start, like "1 B. Hyperkyphosis..."
+    answer_pattern = re.compile(r'^(\d+)\s+([A-Z])\.\s+(.+)')
     last_page_number = None
+    last_answer_number = 0  # Keep track of the last correct answer number
+
+    def handle_new_answer_start(new_answer_start):
+        nonlocal last_answer_number, answer_letter, answer_text_lines, answer
+
+        current_answer_number = int(new_answer_start.group(1))
+        # Check if the answer number is logically incorrect
+        if current_answer_number > last_answer_number + 1:
+            log.warning(
+                f"Answer number {current_answer_number} is out of sequence. Adjusting to {last_answer_number + 1}."
+            )
+            current_answer_number = last_answer_number + 1
+
+        # If we already have an answer queued up, finalize it and start a new one
+        if last_answer_number is not None:
+            answer = Answer(
+                chapter=chapter,
+                page_number=page_number,
+                question_number=last_answer_number,
+                answer_letter=answer_letter,
+                text=' '.join(answer_text_lines)  # Join all lines into a single string
+            )
+            answers.append(answer)
+
+        # Start new answer
+        last_answer_number = current_answer_number  # Update the last valid answer number
+        answer_letter = new_answer_start.group(2)  # Capture the letter (e.g., B)
+        answer_text_lines = [new_answer_start.group(3)]  # Start collecting text for this answer
+
+        return answer_letter, answer_text_lines
 
     for line, page_number in lines:
         line = line.strip()
 
         # Check if line starts a new answer
-        answer_match = answer_pattern.match(line)
-        if answer_match:
-            # If we already have an answer stored, finalize it and start a new one
-            if answer_number is not None:
-                answer = Answer(
-                    chapter=chapter,
-                    page_number=page_number,
-                    question_number=answer_number,
-                    answer_letter=answer_letter,
-                    text=' '.join(answer_text_lines)  # Join all lines into a single string
-                )
-                answers.append(answer)
-
-            # Reset for new answer
-            answer_number = int(answer_match.group(1))  # Capture the answer number (e.g., 1, 2)
-            answer_letter = answer_match.group(2)  # Capture the letter (e.g., B)
-            answer_text_lines = [answer_match.group(3)]  # Start collecting text for this answer
+        found_new_answer_start = answer_pattern.match(line)
+        if found_new_answer_start:
+            answer_letter, answer_text_lines = handle_new_answer_start(found_new_answer_start)
             continue
 
         # Continue collecting text for the current answer
@@ -142,15 +168,14 @@ def parse_answers(lines: list[(str, int)], chapter: int) -> list[Answer]:
         last_page_number = page_number
 
     # Add the last answer to the list
-    if answer_number is not None:
-        answer = Answer(
-            chapter=chapter,
-            page_number=last_page_number,
-            question_number=answer_number,
-            answer_letter=answer_letter,
-            text=' '.join(answer_text_lines)  # Join all lines into a single string
-        )
-        answers.append(answer)
+    answer = Answer(
+        chapter=chapter,
+        page_number=last_page_number,
+        question_number=last_answer_number,
+        answer_letter=answer_letter,
+        text=' '.join(answer_text_lines)  # Join all lines into a single string
+    )
+    answers.append(answer)
 
     return answers
 
@@ -247,10 +272,11 @@ def process_questions_and_answers(page_datas: [RawPageData]) -> list[OutputRow]:
                     f"in chapter {chapter_number} page {answer.page_number} but question not found."
                 )
                 continue
+            assert answer.question_number == question.question_number, "Number on answer doesn't match that on question"
             output_rows.append(
                 OutputRow(
                     chapter=chapter_number,
-                    page_number=page_num,
+                    page_number=answer.page_number,
                     question_number=answer.question_number,
                     question=question.text,
                     question_options=question.question_options,
