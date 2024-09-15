@@ -5,18 +5,17 @@ import pdfplumber
 
 import logging_setup
 from file_operations import create_pdf_copies, load_checkpoint, remove_temp_pdfs, save_checkpoint
-from model import OutputRow, PageData
-from text_processing import process_questions_and_answers
+from model import PageData
 
-LEFT_COL_BBOX = (0, 0, 300, 783)
-RIGHT_COL_BBOX = (300, 0, 611.64, 783)
+LEFT_COL_BBOX = (50, 0, 300, 783)
+RIGHT_COL_BBOX = (300, 0, 570, 783)
 
 
 def distribute_page_ranges(total_pages, max_parallelism):
     """Distributes pages into chunks for parallel processing with logging."""
     log.info("Distributing pages among workers...")
     page_ranges = []
-    start_page = 14  # Start from page 14, as the first 14 pages are garbage
+    start_page = 17  # page ranges are 0-indexed, so -1. Start from page 18, 0-14 rubbish, 14-17 intro
     pages_per_worker = (total_pages - start_page) // max_parallelism
     for i in range(max_parallelism):
         if i == max_parallelism - 1:
@@ -64,13 +63,13 @@ def extract_columns_from_page_range(
 
             # Save the extracted columns to the checkpoint
             save_checkpoint(page_data)
-            log.info(f"Extracted and saved columns for page {page_num}")
+            log.info(f"Page: {page_num} - Extracted columns text from pdf")
 
             results.append(page_data)
     return results
 
 
-def process_pdf_concurrently(pdf_path, max_parallelism) -> [OutputRow]:
+def process_pdf_concurrently(pdf_path, max_parallelism) -> [PageData]:
     """Process the PDF concurrently to extract columns from pages."""
     temp_pdfs = create_pdf_copies(pdf_path, max_parallelism)
     with pdfplumber.open(pdf_path) as pdf:
@@ -112,4 +111,4 @@ def process_pdf_concurrently(pdf_path, max_parallelism) -> [OutputRow]:
     # Remove temporary PDF copies
     remove_temp_pdfs(temp_pdfs)
 
-    return process_questions_and_answers(page_datas)
+    return page_datas
