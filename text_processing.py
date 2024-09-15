@@ -7,6 +7,16 @@ from unidecode import unidecode  # Import unidecode for sanitizing text
 from file_operations import write_to_file
 from model import Answer, BookData, OutputRow, Question, RawPageData
 
+MAIN_QUESTIONS = "MAIN QUESTIONS"
+
+BACK = "Back"
+
+ANSWERS = "ANSWERS"
+
+QUESTIONS = "QUESTIONS"
+
+S = "INTRODUCTION"
+
 QUESTIONS_ANSWERS_FOLDER = "questions_answers"
 
 
@@ -174,13 +184,20 @@ def process_questions_and_answers(page_datas: [RawPageData]) -> list[OutputRow]:
     answers_lines_by_chapter = {}
     questions_so_far = []
     answers_so_far = []
+    is_introduction = False
 
     for idx, line in enumerate(pages.lines):
-        if "ANSWERS" in line:
+        if is_introduction and QUESTIONS not in line:
+            continue
+        if S in line:
+            is_introduction = True
+            introduction_index = line.find(S)
+            line = line[:introduction_index]
+        if ANSWERS in line:
             questions_lines_by_chapter[chapter_number] = questions_so_far
             questions_so_far = []
             is_answers_section = True
-        elif "QUESTIONS" in line:
+        elif QUESTIONS in line:
             if is_answers_section:
                 answers_lines_by_chapter[chapter_number] = answers_so_far
                 answers_so_far = []
@@ -189,7 +206,7 @@ def process_questions_and_answers(page_datas: [RawPageData]) -> list[OutputRow]:
 
         page_num = pages.page_number_by_line_idx[idx]
 
-        if line != "Back" and line != "QUESTIONS" and line != "MAIN QUESTIONS" and line != "ANSWERS":
+        if line != BACK and line != QUESTIONS and line != MAIN_QUESTIONS and line != ANSWERS:
             if is_answers_section:
                 answers_so_far.append((line, page_num))
             else:
